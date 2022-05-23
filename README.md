@@ -23,7 +23,7 @@ Sepp Hochreiter<sup>1 2</sup>
 
 To reproduce our results, first clone the repository and install the conda environment by
 
-    git clone https://git.bioinf.jku.at/fpaischer/history-compression-via-language-models.git
+    git clone https://github.com/ml-jku/helm.git
     cd histoy-compression-via-language-models
     conda env create -f environment.yml
 
@@ -47,6 +47,10 @@ or on the Procgen environment `maze`:
 
 **Note** that by default the Procgen environments are created in the *memory* distribution mode, thus only the six environments 
 as mentioned in the paper can be trained on, all others do not support the *memory* mode.
+
+By default a Tensorboard log is created which can be visualized by
+
+    tensorboard --logdir ./experiments
 
 ## LICENSE
 MIT LICENSE
