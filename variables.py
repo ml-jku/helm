@@ -1,0 +1,1 @@
+procgen_envs = ["caveflyer", "dodgeball", "miner", "jumper", "maze", "heist"]
