@@ -1,30 +1,31 @@
-# History Compression via Language Models for Reinforcement Learning
+# History Compression via Language Models in Reinforcement Learning
 
-Fabian Paischer<sup>1</sup>,
+Fabian Paischer<sup>1 2</sup>,
 Thomas Adler<sup>1</sup>,
 Vihang Patil<sup>1</sup>,
-Angela Bitto-Nemling<sup>1</sup>,
+Angela Bitto-Nemling<sup>1 3</sup>,
 Markus Holzleitner<sup>1</sup>,
-Sebastian Lehner<sup>1</sup>,
+Sebastian Lehner<sup>1 2</sup>,
 Hamid Eghbal-zadeh<sup>1</sup>,
-Sepp Hochreiter<sup>1 2</sup>
+Sepp Hochreiter<sup>1 2 3</sup>
 
-<sup>1</sup> ELLIS Unit Linz and LIT AI Lab, Institute for Machine Learning, Johannes Kepler University Linz, Austria  
-<sup>2</sup> Institute of Advanced Research in Artificial Intelligence (IARAI)
+<sup>1</sup> LIT AI Lab, Institute for Machine Learning, Johannes Kepler University Linz, Austria</br>
+<sup>2</sup> ELLIS Unit Linz  
+<sup>3</sup> Institute of Advanced Research in Artificial Intelligence (IARAI)
 
 ---
 
 **This is the repository for the paper:
-[History Compression via Language Models for Reinforcement Learning]().**
+[History Compression via Language Models in Reinforcement Learning](https://arxiv.org/abs/2205.12258).**
 
-**Detailed blog post on this paper at [this link]().**
+**Detailed blog post on this paper at [this link](https://ml-jku.github.io/blog/2022/helm/).**
 
 ---
 
 To reproduce our results, first clone the repository and install the conda environment by
 
     git clone https://github.com/ml-jku/helm.git
-    cd histoy-compression-via-language-models
+    cd helm
     conda env create -f environment.yml
 
 After installing the conda environment you can train HELM on the KeyCorridor environment by
