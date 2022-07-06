@@ -1,5 +1,7 @@
 from utils import *
-from trainer import HELMPPO
+from trainers.helm_trainer import HELMPPO
+from trainers.lstm_trainer import LSTMPPO
+from trainers.cnn_trainer import CNNPPO
 import torch
 import os
 import uuid
@@ -28,16 +30,23 @@ class Experiment:
             env = DummyVecEnv([make_maze_env() for _ in range(self.config['n_envs'])])
             env = VecMonitor(env)
         elif 'MiniGrid' in self.config['env']:
-            gridobs = True if self.config['model'] == 'RIDE' else False
-            env = DummyVecEnv([make_minigrid_env(self.config['env'], gridobs=gridobs) for _ in range(self.config['n_envs'])])
+            env = DummyVecEnv([make_minigrid_env(self.config['env']) for _ in range(self.config['n_envs'])])
             env = VecNormalize(VecMonitor(env), norm_reward=True, norm_obs=False, clip_reward=1.)
         else:
             # create procgen environment
             env = make_procgen_env(id=self.config['env'], num_envs=self.config['n_envs'], num_levels=0)
 
-        assert self.config['model'] == 'HELM', f"Model type {self.config['model']} not recognized!"
+        assert self.config['model'] in ['HELM', 'Impala-PPO', 'CNN-PPO'], \
+            f"Model type {self.config['model']} not recognized!"
 
-        model = HELMPPO("MlpPolicy", env, verbose=1, tensorboard_log=f"{self.outpath}",
+        if self.config['model'] == 'HELM':
+            trainer = HELMPPO
+        elif self.config['model'] == 'Impala-PPO':
+            trainer = LSTMPPO
+        else:
+            trainer = CNNPPO
+
+        model = trainer("MlpPolicy", env, verbose=1, tensorboard_log=f"{self.outpath}",
                         lr_decay=self.config['lr_decay'], ent_coef=self.config['ent_coef'],
                         ent_decay=self.config['ent_decay'], learning_rate=self.config['learning_rate'],
                         vf_coef=self.config['vf_coef'], n_epochs=int(self.config['n_epochs']),

@@ -163,6 +163,91 @@ class HELM(nn.Module):
         return value, log_prob, entropy
 
 
+class MarkovianImpalaCNN(nn.Module):
+    def __init__(self, obs_dim, action_dim, optimizer, learning_rate):
+        super(MarkovianImpalaCNN, self).__init__()
+        self.encoder = SmallImpalaCNN(obs_dim, channel_scale=4, hidden_dim=1024)
+        hidden_dim = self.encoder.hidden_dim
+
+        self.actor = DiscreteActor(hidden_dim, hidden=128, out_dim=action_dim).apply(orthogonal_init)
+
+        critic_modules = []
+        critic_modules.extend([nn.Linear(hidden_dim, 512),
+                               nn.LayerNorm(512, elementwise_affine=False),
+                               nn.ReLU()])
+        critic_modules.append(nn.Linear(512, 1))
+        self.critic = nn.Sequential(*critic_modules).apply(orthogonal_init)
+
+        try:
+            self.optimizer = getattr(torch.optim, optimizer)(self.parameters(), lr=learning_rate)
+        except AttributeError:
+            raise NotImplementedError(f"{optimizer} does not exist")
+
+    def forward(self, states):
+        encoded = self.encoder(states)
+        action, log_prob = self.actor(encoded)
+        value = self.critic(encoded)
+        return action.cpu().detach().numpy(), value.cpu().detach().squeeze().numpy(), log_prob.cpu().detach().numpy()
+
+    def evaluate_actions(self, states, actions):
+        encoded = self.encoder(states)
+        log_probs, entropy = self.actor.evaluate(encoded, actions)
+        values = self.critic(encoded).squeeze()
+        return values, log_probs, entropy
+
+
+class LSTMImpalaAgent(nn.Module):
+    def __init__(self, action_dim, input_dim, optimizer, learning_rate, channel_scale=1, hidden_dim=256):
+        super(LSTMImpalaAgent, self).__init__()
+        self.encoder = SmallImpalaCNN(input_dim, channel_scale=channel_scale, hidden_dim=hidden_dim)
+        self.hidden_dim = self.encoder.hidden_dim
+        self.lstm = nn.LSTM(input_size=self.hidden_dim, hidden_size=self.hidden_dim, batch_first=True)
+        self.actor = DiscreteActor(self.hidden_dim, 128, action_dim).apply(orthogonal_init)
+        self.critic = nn.Sequential(nn.Linear(self.hidden_dim, 512),
+                                    nn.LayerNorm(512, elementwise_affine=False),
+                                    nn.ReLU(),
+                                    nn.Linear(512, 1)).apply(orthogonal_init)
+        self.hidden = None
+        self.cell = None
+        try:
+            self.optimizer = getattr(torch.optim, optimizer)(self.parameters(), lr=learning_rate)
+        except AttributeError:
+            raise NotImplementedError(f"{optimizer} does not exist")
+
+    def reset_states(self):
+        self._init_hidden(1)
+
+    def _init_hidden(self, batch_size):
+        device = next(self.parameters()).device
+        self.hidden = torch.zeros(1, batch_size, self.hidden_dim).to(device)
+        self.cell = torch.zeros(1, batch_size, self.hidden_dim).to(device)
+
+    def forward(self, state):
+        bs, *_ = state.shape
+        encoded = self.encoder(state)
+        if self.hidden is None and self.cell is None:
+            self._init_hidden(bs)
+        last_hidden = np.array([self.hidden.cpu().numpy().squeeze(), self.cell.cpu().numpy().squeeze()])
+        hidden, (self.hidden, self.cell) = self.lstm(encoded.unsqueeze(1), (self.hidden, self.cell))
+        hidden = hidden[:, -1, :]
+        action, log_prob = self.actor(hidden)
+        values = self.critic(hidden).squeeze()
+        return action.cpu().numpy(), values.cpu().numpy(), log_prob.cpu().numpy().squeeze(), last_hidden
+
+    def evaluate_actions(self, states, actions, internals, detach_value_grad=False):
+        bs, seqlen, *_ = states.shape
+        states = states.reshape(bs*seqlen, *states.shape[2:])
+        encoded = self.encoder(states)
+        encoded = encoded.view(bs, seqlen, -1)
+        internals = (internals[:, 0, 0, :].unsqueeze(0).contiguous(), internals[:, 0, 1, :].unsqueeze(0).contiguous())
+        hidden, _ = self.lstm(encoded, internals)
+        log_prob, entropy = self.actor.evaluate(hidden, actions)
+        if detach_value_grad:
+            hidden = hidden.detach()
+        value = self.critic(hidden)
+        return value, log_prob, entropy
+
+
 def orthogonal_init(m):
     if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
         gain = nn.init.calculate_gain('relu')

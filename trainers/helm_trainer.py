@@ -168,8 +168,6 @@ class HELMPPO(OnPolicyAlgorithm):
         self.highest_return = 0.0
         self.config = config
         self._last_mems = None
-        self._last_hiddens = None
-        self._last_cells = None
 
         if lr_decay == 'none':
             self.learning_rate = constant_fn(learning_rate)
@@ -219,6 +217,7 @@ class HELMPPO(OnPolicyAlgorithm):
         self.rollout_buffer = RolloutBuffer(self.n_steps, self.observation_space, self.action_space, device,
                                             gamma=gamma, gae_lambda=gae_lambda, n_envs=n_envs)
 
+
         self.policy = HELM(env.action_space, self.observation_space.shape, self.config['optimizer'],
                            self.config['learning_rate'], beta=self.config['beta'], device=self.device).to(self.device)
 
@@ -238,7 +237,7 @@ class HELMPPO(OnPolicyAlgorithm):
         th.backends.cudnn.deterministic = True
         th.backends.cudnn.benchmark = False
         self.action_space.seed(seed)
-        if self.env is not None and self.config['env'] in procgen_envs:
+        if self.env is not None and self.config['env'] not in procgen_envs:
             # procgen environments do not support setting the seed that way
             self.env.seed(seed)
 
@@ -266,12 +265,12 @@ class HELMPPO(OnPolicyAlgorithm):
 
     def _dump_sources(self, outpath) -> None:
         zipf = zipfile.ZipFile(os.path.join(outpath, 'LMRL.zip'), 'w', zipfile.ZIP_DEFLATED)
-        src_files = glob.glob(f'{os.path.abspath(".")}/**/*.py', recursive=True)
+        src_files = glob.glob(f'{os.path.abspath("..")}/**/*.py', recursive=True)
         for file in src_files:
-            zipf.write(file, os.path.relpath(file, '../'))
+            zipf.write(file, os.path.relpath(file, '../../'))
 
     def _dump_config(self, outpath) -> None:
-        with open(os.path.join(outpath, 'config.json'), 'w') as f:
+        with open(os.path.join(outpath, '../config.json'), 'w') as f:
             f.write(json.dumps(self.config, indent=4, sort_keys=True))
 
     def train(self) -> None:
@@ -459,9 +458,10 @@ class HELMPPO(OnPolicyAlgorithm):
                 image_obs = self._last_obs
                 high = env.observation_space.high.reshape(-1)[0]
                 observations = torch.tensor(image_obs / high).float().to(self.device)
-                self.policy.memory = self._last_mems
-                action, value, log_prob, hidden = self.policy(observations)
-                self._last_mems = self.policy.memory
+                if isinstance(self.policy, HELM):
+                    self.policy.memory = self._last_mems
+                    action, value, log_prob, hidden = self.policy(observations)
+                    self._last_mems = self.policy.memory
 
             new_obs, rewards, dones, infos = env.step(action)
             self.num_timesteps += env.num_envs
@@ -487,8 +487,9 @@ class HELMPPO(OnPolicyAlgorithm):
             image_obs = self._last_obs
             high = env.observation_space.high.reshape(-1)[0]
             observations = torch.tensor(image_obs / high).float().to(self.device)
-            self.policy.memory = self._last_mems
-            action, value, log_prob, hidden = self.policy(observations)
+            if isinstance(self.policy, HELM):
+                self.policy.memory = self._last_mems
+                action, value, log_prob, hidden = self.policy(observations)
 
         rollout_buffer.compute_returns_and_advantage(last_values=value, dones=self._last_episode_starts)
         callback.on_rollout_end()

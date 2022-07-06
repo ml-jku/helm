@@ -2,6 +2,7 @@
     "adv_norm": false,
     "clip_range_vf": null,
     "n_batches": 8,
+    "batch_size": 16,
     "beta": 100,
     "beta_lr": 1e-3,
     "beta_schedule": "none",
