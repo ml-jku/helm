@@ -181,7 +181,7 @@ class RolloutBuffer(BaseBuffer):
     def reset(self) -> None:
 
         self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32)
-        if not self.hidden_dim:
+        if self.hidden_dim:
             self.hiddens = np.zeros((self.buffer_size, self.n_envs, self.hidden_dim), dtype=np.float32)
         self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
@@ -261,7 +261,7 @@ class RolloutBuffer(BaseBuffer):
             obs = obs.reshape((self.n_envs,) + self.obs_shape)
 
         self.observations[self.pos] = np.array(obs).copy()
-        if not self.hidden_dim:
+        if self.hidden_dim:
             self.hiddens[self.pos] = np.array(hidden).copy()
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
@@ -281,13 +281,14 @@ class RolloutBuffer(BaseBuffer):
 
             _tensor_names = [
                 "observations",
-                "hiddens",
                 "actions",
                 "values",
                 "log_probs",
                 "advantages",
                 "returns",
             ]
+            if self.hidden_dim:
+                _tensor_names.append("hiddens")
 
             for tensor in _tensor_names:
                 self.__dict__[tensor] = self.swap_and_flatten(self.__dict__[tensor])
@@ -304,9 +305,10 @@ class RolloutBuffer(BaseBuffer):
             start_idx += batch_size
 
     def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None):
+        hiddens = self.hiddens[batch_inds] if self.hidden_dim else np.zeros((0,))
         data = (
             self.observations[batch_inds],
-            self.hiddens[batch_inds],
+            hiddens,
             self.actions[batch_inds],
             self.values[batch_inds].flatten(),
             self.log_probs[batch_inds].flatten(),
