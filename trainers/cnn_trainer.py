@@ -264,9 +264,9 @@ class CNNPPO(OnPolicyAlgorithm):
 
     def _dump_sources(self, outpath) -> None:
         zipf = zipfile.ZipFile(os.path.join(outpath, 'LMRL.zip'), 'w', zipfile.ZIP_DEFLATED)
-        src_files = glob.glob(f'{os.path.abspath("..")}/**/*.py', recursive=True)
+        src_files = glob.glob(f'{os.path.abspath(".")}/**/*.py', recursive=True)
         for file in src_files:
-            zipf.write(file, os.path.relpath(file, '../../'))
+            zipf.write(file, os.path.relpath(file, '../'))
 
     def _dump_config(self, outpath) -> None:
         with open(os.path.join(outpath, '../config.json'), 'w') as f:
