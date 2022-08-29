@@ -105,7 +105,7 @@ class HELM(nn.Module):
 
         self.model = TransfoXLModel.from_pretrained('transfo-xl-wt103', config=config)
         n_tokens = self.model.word_emb.n_token
-        word_embs = self.model.word_emb(torch.arange(n_tokens)).to(device)
+        word_embs = self.model.word_emb(torch.arange(n_tokens)).detach().to(device)
         hidden_dim = self.model.d_embed
         hopfield_input = np.prod(input_dim[1:])
         self.frozen_hopfield = FrozenHopfield(hidden_dim, hopfield_input, word_embs, beta=beta)

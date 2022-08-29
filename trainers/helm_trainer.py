@@ -458,10 +458,9 @@ class HELMPPO(OnPolicyAlgorithm):
                 image_obs = self._last_obs
                 high = env.observation_space.high.reshape(-1)[0]
                 observations = torch.tensor(image_obs / high).float().to(self.device)
-                if isinstance(self.policy, HELM):
-                    self.policy.memory = self._last_mems
-                    action, value, log_prob, hidden = self.policy(observations)
-                    self._last_mems = self.policy.memory
+                self.policy.memory = self._last_mems
+                action, value, log_prob, hidden = self.policy(observations)
+                self._last_mems = self.policy.memory
 
             new_obs, rewards, dones, infos = env.step(action)
             self.num_timesteps += env.num_envs
@@ -487,9 +486,8 @@ class HELMPPO(OnPolicyAlgorithm):
             image_obs = self._last_obs
             high = env.observation_space.high.reshape(-1)[0]
             observations = torch.tensor(image_obs / high).float().to(self.device)
-            if isinstance(self.policy, HELM):
-                self.policy.memory = self._last_mems
-                action, value, log_prob, hidden = self.policy(observations)
+            self.policy.memory = self._last_mems
+            action, value, log_prob, hidden = self.policy(observations)
 
         rollout_buffer.compute_returns_and_advantage(last_values=value, dones=self._last_episode_starts)
         callback.on_rollout_end()
