@@ -9,26 +9,32 @@ dependencies:
   - _pytorch_select=0.1=cpu_0
   - blas=1.0=mkl
   - brotlipy=0.7.0=py38h27cfd23_1003
-  - ca-certificates=2021.10.26=h06a4308_2
-  - certifi=2021.10.8=py38h06a4308_2
+  - bzip2=1.0.8=h7f98852_4
+  - ca-certificates=2022.9.24=ha878542_0
+  - certifi=2022.9.24=pyhd8ed1ab_0
   - cffi=1.15.0=py38hd667e15_1
   - charset-normalizer=2.0.4=pyhd3eb1b0_0
   - click=8.0.3=pyhd3eb1b0_0
   - cryptography=36.0.0=py38h9ce1e76_0
-  - cudatoolkit=9.2=0
+  - cudatoolkit=11.3.1=h2bc3f7f_2
   - dataclasses=0.8=pyh6d0b6a4_7
+  - ffmpeg=4.3=hf484d3e_0
   - filelock=3.4.2=pyhd3eb1b0_0
   - freetype=2.11.0=h70c0345_0
   - giflib=5.2.1=h7b6447c_0
+  - gmp=6.2.1=h58526e2_0
+  - gnutls=3.6.13=h85f3911_1
   - idna=3.3=pyhd3eb1b0_0
   - intel-openmp=2021.4.0=h06a4308_3561
   - joblib=1.1.0=pyhd3eb1b0_0
   - jpeg=9d=h7f8727e_0
+  - lame=3.100=h7f98852_1001
   - lcms2=2.12=h3be6417_0
   - ld_impl_linux-64=2.35.1=h7274673_9
   - libffi=3.3=he6710b0_2
   - libgcc-ng=9.3.0=h5101ec6_17
   - libgomp=9.3.0=h5101ec6_17
+  - libiconv=1.16=h516909a_0
   - libpng=1.6.37=hbc83047_0
   - libstdcxx-ng=9.3.0=hd4cf53a_17
   - libtiff=4.2.0=h85742a9_0
@@ -41,11 +47,13 @@ dependencies:
   - mkl_fft=1.3.1=py38hd3c417c_0
   - mkl_random=1.2.2=py38h51133e4_0
   - ncurses=6.3=h7f8727e_2
+  - nettle=3.6=he412f7d_0
   - ninja=1.10.2=py38hd09550d_3
   - numpy=1.21.2=py38h20f2e39_0
   - numpy-base=1.21.2=py38h79a1101_0
   - olefile=0.46=pyhd3eb1b0_0
-  - openssl=1.1.1m=h7f8727e_0
+  - openh264=2.1.1=h780b84a_0
+  - openssl=1.1.1s=h7f8727e_0
   - packaging=21.3=pyhd3eb1b0_0
   - pillow=8.4.0=py38h5aabda8_0
   - pip=21.2.4=py38h06a4308_0
@@ -55,7 +63,8 @@ dependencies:
   - pysocks=1.7.1=py38h06a4308_0
   - python=3.8.12=h12debd9_0
   - python_abi=3.8=2_cp38
-  - pytorch=1.7.1=py3.8_cuda9.2.148_cudnn7.6.3_0
+  - pytorch=1.10.1=py3.8_cuda11.3_cudnn8.2.0_0
+  - pytorch-mutex=1.0=cuda
   - readline=8.1.2=h7f8727e_1
   - regex=2021.11.2=py38h7f8727e_0
   - requests=2.27.1=pyhd3eb1b0_0
@@ -65,8 +74,8 @@ dependencies:
   - sqlite=3.37.0=hc218d9a_0
   - tk=8.6.11=h1ccaba5_0
   - tokenizers=0.9.4=py38h781e378_1
-  - torchaudio=0.7.2=py38
-  - torchvision=0.8.2=cpu_py38ha229d99_0
+  - torchaudio=0.10.1=py38_cu113
+  - torchvision=0.11.2=py38_cu113
   - tqdm=4.62.3=pyhd3eb1b0_1
   - transformers=4.3.2=pyhd8ed1ab_0
   - typing_extensions=3.10.0.2=pyh06a4308_0
@@ -81,6 +90,7 @@ dependencies:
     - cloudpickle==1.6.0
     - cycler==0.11.0
     - fonttools==4.28.5
+    - ftfy==6.1.1
     - glcontext==2.3.4
     - glfw==1.12.0
     - google-auth==2.3.3
@@ -89,8 +99,11 @@ dependencies:
     - gym==0.19.0
     - gym-minigrid==1.0.2
     - gym3==0.3.3
+    - gymnasium==0.26.3
+    - gymnasium-notices==0.0.1
     - imageio==2.14.1
     - imageio-ffmpeg==0.3.0
+    - importlib-metadata==5.1.0
     - kiwisolver==1.3.2
     - markdown==3.3.6
     - matplotlib==3.5.1
@@ -102,6 +115,7 @@ dependencies:
     - protobuf==3.19.3
     - pyasn1==0.4.8
     - pyasn1-modules==0.2.8
+    - pyglet==1.5.27
     - python-dateutil==2.8.2
     - pytz==2021.3
     - pywavelets==1.2.0
@@ -115,5 +129,10 @@ dependencies:
     - tensorboard-plugin-wit==1.8.1
     - tifffile==2021.11.2
     - torch==1.10.1
+    - wcwidth==0.2.5
     - werkzeug==2.0.2
-prefix: /home/fabian/anaconda3/envs/helm
+    - zipp==3.10.0
+    - git+https://github.com/zuoxingdong/mazelab.git
+    - git+https://github.com/Farama-Foundation/Miniworld.git
+    - git+https://github.com/openai/CLIP.git
+prefix: /system/apps/mlsoft/conda/group-bioinf/fpaische/envs/helm

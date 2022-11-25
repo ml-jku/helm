@@ -3,7 +3,7 @@ from gym_minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 import numpy as np
 from typing import Optional
 from stable_baselines3.common.buffers import BaseBuffer
-from stable_baselines3.common.vec_env import VecNormalize, VecExtractDictObs, VecMonitor
+from stable_baselines3.common.vec_env import VecNormalize, VecExtractDictObs, VecMonitor, VecTransposeImage
 from gym import spaces
 from typing import Union, Generator
 from queue import Queue
@@ -11,6 +11,7 @@ import torch as th
 from typing import NamedTuple
 from procgen import ProcgenEnv
 from envs.random_maze import Env
+from gymnasium.spaces.dict import Dict
 
 
 def generate_in_bg(generator, num_cached=10):
@@ -76,15 +77,50 @@ class Minigrid2Image(gym.ObservationWrapper):
         return observation['image']
 
 
+class MiniWorldWrapper(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.action_space = gym.spaces.Discrete(env.action_space.n)
+        if isinstance(self.observation_space, Dict):
+            shape = env.observation_space.spaces['obs'].shape
+            self.observation_space = gym.spaces.Box(low=0, high=255, shape=(shape[-1], *shape[:-1]))
+        else:
+            shape = self.env.observation_space.shape
+            self.observation_space = gym.spaces.Box(shape=(shape[-1], *shape[:-1]), low=0, high=255)
+
+    def reset(self):
+        obs = self.env.reset()[0]
+        if isinstance(obs, dict):
+            obs = obs['obs']
+        return obs.transpose(2, 0, 1)
+
+    def step(self, action):
+        obs, rew, done, _, info = self.env.step(action)
+        if isinstance(obs, dict):
+            obs = obs['obs']
+        return obs.transpose(2, 0, 1), rew, done, info
+
+    def seed(self, seed=None):
+        pass
+
+
+def make_miniworld_env(id: str):
+    import gym_miniworld
+    import gymnasium
+
+    def _init():
+        env = gymnasium.make(id)
+        env = MiniWorldWrapper(env)
+        return env
+
+    return _init
+
+
 def make_minigrid_env(id: str):
     """
     Utility function for multiprocessed env.
 
-    :param env_id: (str) the environment ID
-    :param num_env: (int) the number of environment you wish to have in subprocesses
-    :param seed: (int) the inital seed for RNG
-    :param rank: (int) index of the subprocess
-    :return: (Callable)
+    :param id: (str) the environment ID
     """
 
     def _init():

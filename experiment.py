@@ -1,7 +1,4 @@
 from utils import *
-from trainers.helm_trainer import HELMPPO
-from trainers.lstm_trainer import LSTMPPO
-from trainers.cnn_trainer import CNNPPO
 import torch
 import os
 import uuid
@@ -32,21 +29,30 @@ class Experiment:
         elif 'MiniGrid' in self.config['env']:
             env = DummyVecEnv([make_minigrid_env(self.config['env']) for _ in range(self.config['n_envs'])])
             env = VecNormalize(VecMonitor(env), norm_reward=True, norm_obs=False, clip_reward=1.)
+        elif 'MiniWorld' in self.config['env']:
+            env = DummyVecEnv([make_miniworld_env(self.config['env']) for _ in range(self.config['n_envs'])])
+            env = VecNormalize(VecMonitor(env), norm_reward=True, norm_obs=False, clip_reward=1.)
         else:
             # create procgen environment
             env = make_procgen_env(id=self.config['env'], num_envs=self.config['n_envs'], num_levels=0)
 
-        assert self.config['model'] in ['HELM', 'Impala-PPO', 'CNN-PPO'], \
+        assert self.config['model'] in ['HELMv2', 'HELM', 'Impala-PPO', 'CNN-PPO'], \
             f"Model type {self.config['model']} not recognized!"
 
         if self.config['model'] == 'HELM':
+            from trainers.helm_trainer import HELMPPO
             trainer = HELMPPO
+        elif self.config['model'] == 'HELMv2':
+            from trainers.helmv2_trainer import HELMv2PPO
+            trainer = HELMv2PPO
         elif self.config['model'] == 'Impala-PPO':
+            from trainers.lstm_trainer import LSTMPPO
             trainer = LSTMPPO
         else:
+            from trainers.cnn_trainer import CNNPPO
             trainer = CNNPPO
 
-        model = trainer("MlpPolicy", env, verbose=1, tensorboard_log=f"{self.outpath}",
+        model = trainer("MlpPolicy", env, verbose=1, tensorboard_log=self.outpath,
                         lr_decay=self.config['lr_decay'], ent_coef=self.config['ent_coef'],
                         ent_decay=self.config['ent_decay'], learning_rate=self.config['learning_rate'],
                         vf_coef=self.config['vf_coef'], n_epochs=int(self.config['n_epochs']),

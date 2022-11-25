@@ -3,6 +3,7 @@ from torch.distributions import Categorical
 from transformers import TransfoXLModel, TransfoXLConfig
 import torch
 import numpy as np
+import clip
 
 
 class DiscreteActor(nn.Module):
@@ -43,7 +44,7 @@ class SmallImpalaCNN(nn.Module):
     def __init__(self, observation_shape, channel_scale=1, hidden_dim=256):
         super(SmallImpalaCNN, self).__init__()
         self.obs_size = observation_shape
-        in_channels = self.obs_size[0]
+        in_channels = 3
         kernel1 = 8 if self.obs_size[1] > 9 else 4
         kernel2 = 4 if self.obs_size[2] > 9 else 2
         stride1 = 4 if self.obs_size[1] > 9 else 2
@@ -68,7 +69,11 @@ class SmallImpalaCNN(nn.Module):
         return x
 
     def _get_feature_size(self, shape):
-        dummy_input = torch.zeros((shape[0], *shape[1:])).unsqueeze(0)
+        if shape[0] != 3:
+            dummy_input = torch.zeros((shape[-1], *shape[:-1])).unsqueeze(0)
+            print(dummy_input.shape)
+        else:
+            dummy_input = torch.zeros((shape[0], *shape[1:])).unsqueeze(0)
         x = self.block2(self.block1(dummy_input))
         return np.prod(x.shape[1:])
 
@@ -161,6 +166,101 @@ class HELM(nn.Module):
         value = self.critic(hidden).squeeze()
 
         return value, log_prob, entropy
+
+
+class HELMv2(nn.Module):
+    def __init__(self, action_space, input_dim, optimizer, learning_rate, epsilon=1e-8, mem_len=511, device='cuda'):
+        super(HELMv2, self).__init__()
+        config = TransfoXLConfig()
+        config.mem_len = mem_len
+        self.mem_len = config.mem_len
+
+        self.model = TransfoXLModel.from_pretrained('transfo-xl-wt103', config=config)
+        n_tokens = self.model.word_emb.n_token
+        word_embs = self.model.word_emb(torch.arange(n_tokens)).detach().to(device)
+        self.we_std = word_embs.std(0)
+        self.we_mean = word_embs.mean(0)
+        self.vis_encoder = VisionBackbone()
+        hidden_dim = self.model.d_embed
+
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.query_encoder = SmallImpalaCNN(input_dim, channel_scale=4, hidden_dim=hidden_dim)
+        self.out_dim = hidden_dim*2
+        self.actor = DiscreteActor(self.out_dim, 128, action_space.n).apply(orthogonal_init)
+        self.critic = nn.Sequential(nn.Linear(self.out_dim, 512),
+                                    nn.LayerNorm(512, elementwise_affine=False),
+                                    nn.ReLU(),
+                                    nn.Linear(512, 1)).apply(orthogonal_init)
+        try:
+            self.optimizer = getattr(torch.optim, optimizer)(self.yield_trainable_params(), lr=learning_rate,
+                                                             eps=epsilon)
+        except AttributeError:
+            raise NotImplementedError(f"{optimizer} does not exist")
+        self.memory = None
+
+    def yield_trainable_params(self):
+        for n, p in self.named_parameters():
+            if 'model.' in n or 'vis_encoder' in n:
+                continue
+            else:
+                yield p
+
+    def forward(self, observations):
+        bs, *_ = observations.shape
+        obs_query = self.query_encoder(observations)
+        observations = self.vis_encoder(observations)
+        observations = (observations - observations.mean(0)) / (observations.std(0) + 1e-8)
+        observations = observations * self.we_std + self.we_mean
+        out = self.model(inputs_embeds=observations.unsqueeze(1), output_hidden_states=True, mems=self.memory)
+        self.memory = out.mems
+        hidden = out.last_hidden_state[:, -1, :]
+        hiddens = out.last_hidden_state[:, -1, :].cpu().numpy()
+
+        hidden = torch.cat([hidden, obs_query], dim=-1)
+
+        action, log_prob = self.actor(hidden)
+        values = self.critic(hidden).squeeze()
+
+        return action.cpu().numpy(), values.cpu().numpy(), log_prob.cpu().numpy().squeeze(), hiddens
+
+    def evaluate_actions(self, hidden_states, actions, observations):
+        queries = self.query_encoder(observations)
+        hidden = torch.cat([hidden_states, queries], dim=-1)
+
+        log_prob, entropy = self.actor.evaluate(hidden, actions)
+        value = self.critic(hidden).squeeze()
+
+        return value, log_prob, entropy
+
+
+class VisionBackbone(nn.Module):
+    def __init__(self):
+        super(VisionBackbone, self).__init__()
+        print(f"Allocating CLIP...")
+        self.model, preprocess = clip.load("RN50")
+        self.transforms = preprocess
+        preprocess.transforms = [preprocess.transforms[0], preprocess.transforms[1], preprocess.transforms[-1]]
+        self.transforms = preprocess
+
+        self.model.eval()
+        self._deactivate_grad()
+
+    def forward(self, observations):
+        observations = self._preprocess(observations)
+        out = self.model.encode_image(observations).float()
+        return out
+
+    def _deactivate_grad(self):
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+
+    def _preprocess(self, observation):
+        return self.transforms(observation)
 
 
 class MarkovianImpalaCNN(nn.Module):
