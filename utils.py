@@ -1,4 +1,5 @@
 import gym
+import torch
 from gym_minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 import numpy as np
 from typing import Optional
@@ -38,7 +39,6 @@ def generate_in_bg(generator, num_cached=10):
 
 
 def get_linear_burn_in_fn(start: float, end: float, end_fraction: float, start_fraction: float):
-
     def func(progress_remaining: float) -> float:
         if (1 - progress_remaining) > end_fraction:
             return end
@@ -51,7 +51,6 @@ def get_linear_burn_in_fn(start: float, end: float, end_fraction: float, start_f
 
 
 def get_exp_decay(start: float, decay: float, start_fraction: float):
-
     def func(progress_remaining: float, counter: float) -> float:
         if (1 - progress_remaining) < start_fraction:
             return start
@@ -194,15 +193,15 @@ class RolloutBuffer(BaseBuffer):
     """
 
     def __init__(
-        self,
-        buffer_size: int,
-        observation_space: spaces.Space,
-        action_space: spaces.Space,
-        device: Union[th.device, str] = "cpu",
-        gae_lambda: float = 1,
-        gamma: float = 0.99,
-        n_envs: int = 1,
-        hidden_dim: int = 1024
+            self,
+            buffer_size: int,
+            observation_space: spaces.Space,
+            action_space: spaces.Space,
+            device: Union[th.device, str] = "cpu",
+            gae_lambda: float = 1,
+            gamma: float = 0.99,
+            n_envs: int = 1,
+            hidden_dim: int = 1024
     ):
         super(RolloutBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
         self.gae_lambda = gae_lambda
@@ -268,14 +267,14 @@ class RolloutBuffer(BaseBuffer):
         self.returns = self.advantages + self.values
 
     def add(
-        self,
-        obs: np.ndarray,
-        hidden: np.ndarray,
-        action: np.ndarray,
-        reward: np.ndarray,
-        episode_start: np.ndarray,
-        value: th.Tensor,
-        log_prob: th.Tensor
+            self,
+            obs: np.ndarray,
+            hidden: np.ndarray,
+            action: np.ndarray,
+            reward: np.ndarray,
+            episode_start: np.ndarray,
+            value: th.Tensor,
+            log_prob: th.Tensor
     ) -> None:
         """
         :param obs: Observation
@@ -379,17 +378,18 @@ class RecurrentRolloutBuffer(BaseBuffer):
     """
 
     def __init__(
-        self,
-        buffer_size: int,
-        observation_space: spaces.Space,
-        action_space: spaces.Space,
-        device: Union[th.device, str] = "cpu",
-        gae_lambda: float = 1,
-        gamma: float = 0.99,
-        n_envs: int = 1,
-        hidden_dim: int = 256
+            self,
+            buffer_size: int,
+            observation_space: spaces.Space,
+            action_space: spaces.Space,
+            device: Union[th.device, str] = "cpu",
+            gae_lambda: float = 1,
+            gamma: float = 0.99,
+            n_envs: int = 1,
+            hidden_dim: int = 256
     ):
-        super(RecurrentRolloutBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
+        super(RecurrentRolloutBuffer, self).__init__(buffer_size, observation_space, action_space, device,
+                                                     n_envs=n_envs)
         self.gae_lambda = gae_lambda
         self.gamma = gamma
         self.observations, self.actions, self.rewards, self.advantages = None, None, None, None
@@ -452,14 +452,14 @@ class RecurrentRolloutBuffer(BaseBuffer):
         self.returns = self.advantages + self.values
 
     def add(
-        self,
-        obs: np.ndarray,
-        hidden: np.ndarray,
-        action: np.ndarray,
-        reward: np.ndarray,
-        episode_start: np.ndarray,
-        value: th.Tensor,
-        log_prob: th.Tensor
+            self,
+            obs: np.ndarray,
+            hidden: np.ndarray,
+            action: np.ndarray,
+            reward: np.ndarray,
+            episode_start: np.ndarray,
+            value: th.Tensor,
+            log_prob: th.Tensor
     ) -> None:
         """
         :param obs: Observation
@@ -555,9 +555,44 @@ class RecurrentRolloutBuffer(BaseBuffer):
                     ep_starts = np.insert(ep_starts, len(ep_starts), self.buffer_size)
                 for start, end in zip(ep_starts[:-1], ep_starts[1:]):
                     subseqs.append(tensor_dict[t][start: end, i, ...])
-                    seqlens.append(end-start)
+                    seqlens.append(end - start)
             self.__dict__[t] = subseqs
 
         maxlen = np.max(seqlens)
         for t in _tensor_names:
             self.__dict__[t], self.valid_masks = self._pad_sequences(self.__dict__[t], maxlen)
+
+
+class FIFOTensor():
+    def __init__(self, size, cls_token, sep_token, device=th.device("cpu")):
+        super().__init__()
+        self._bs, self._len, *_ = size
+        self.data = th.zeros(size=size, device=device)
+        assert cls_token.shape == th.Size([*_]), f"CLS Token must be size {[*_]} but is {list(cls_token.shape)}"
+        assert sep_token.shape == th.Size([*_]), f"CLS Token must be size {[*_]} but is {list(sep_token.shape)}"
+        self.cls_token = cls_token
+        self.sep_token = sep_token
+        self.data[:, 0, :] = self.cls_token
+        self.shape = torch.Size(size)
+        self._idx = 1
+
+    def push(self, new_obs):
+        if self._idx < (self._len - 1):
+            self.data[:, self._idx, :] = new_obs
+            self.data[:, self._idx + 1, :] = self.sep_token
+            self._idx += 2
+        else:
+            self.data[:, 1:, :] = th.roll(self.data[:, 1:, :], -2, 1)
+            if self._len % 2 == 0:
+                self.data[:, -3, :] = new_obs
+                self.data[:, -2, :] = self.sep_token
+                self.data[:, -1, :] = 0.
+            else:
+                self.data[:, -2, :] = new_obs
+                self.data[:, -1, :] = self.sep_token
+
+    def __getitem__(self, item):
+        return self.data[item]
+
+    def __repr__(self):
+        return f"{list(self.data.shape)}_{self.data}"

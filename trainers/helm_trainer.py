@@ -12,7 +12,7 @@ import torch.cuda
 from gym import spaces
 from torch.nn import functional as F
 import time
-from utils import get_linear_burn_in_fn, get_exp_decay, RolloutBuffer
+from utils import get_linear_burn_in_fn, get_exp_decay, RolloutBuffer, FIFOTensor
 from variables import procgen_envs
 from model import HELM
 
@@ -215,8 +215,7 @@ class HELMPPO(OnPolicyAlgorithm):
             self._set_seed(seed)
 
         self.rollout_buffer = RolloutBuffer(self.n_steps, self.observation_space, self.action_space, device,
-                                            gamma=gamma, gae_lambda=gae_lambda, n_envs=n_envs)
-
+                                            gamma=gamma, gae_lambda=gae_lambda, n_envs=n_envs, hidden_dim=768)
 
         self.policy = HELM(env.action_space, self.observation_space.shape, self.config['optimizer'],
                            self.config['learning_rate'], beta=self.config['beta'], device=self.device).to(self.device)
@@ -444,8 +443,12 @@ class HELMPPO(OnPolicyAlgorithm):
         callback.on_rollout_start()
         # Initialize memory on first rollout collection
         if self._last_mems is None:
-            self._last_mems = [torch.zeros((self.policy.mem_len, self.n_envs, self.policy.model.d_embed)).to(self.device)
-                               for _ in range(self.policy.model.n_layer)]
+            self._last_mems = FIFOTensor(
+                size=(self.n_envs, self.policy.mem_len, self.policy.model.config.hidden_size),
+                cls_token=self.policy.model.embeddings.word_embeddings.weight[101],  # 'CLS'
+                sep_token=self.policy.model.embeddings.word_embeddings.weight[102],  # 'SEP'
+                device=self.device
+            )
 
         start = time.time()
 
@@ -479,8 +482,7 @@ class HELMPPO(OnPolicyAlgorithm):
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
-            for l in range(len(self._last_mems)):
-                self._last_mems[l][:, self._last_episode_starts] = 0.
+            self._last_mems.data[self._last_episode_starts] = 0.
 
         with th.no_grad():
             image_obs = self._last_obs

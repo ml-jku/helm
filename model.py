@@ -1,6 +1,6 @@
 import torch.nn as nn
 from torch.distributions import Categorical
-from transformers import TransfoXLModel, TransfoXLConfig
+from transformers import BertModel, BertConfig
 import torch
 import numpy as np
 import clip
@@ -104,14 +104,13 @@ class HELM(nn.Module):
     def __init__(self, action_space, input_dim, optimizer, learning_rate, epsilon=1e-8, mem_len=511, beta=1,
                  device='cuda'):
         super(HELM, self).__init__()
-        config = TransfoXLConfig()
-        config.mem_len = mem_len
-        self.mem_len = config.mem_len
-
-        self.model = TransfoXLModel.from_pretrained('transfo-xl-wt103', config=config)
-        n_tokens = self.model.word_emb.n_token
-        word_embs = self.model.word_emb(torch.arange(n_tokens)).detach().to(device)
-        hidden_dim = self.model.d_embed
+        self.device = device
+        config = BertConfig()
+        self.mem_len = mem_len
+        self.model = BertModel.from_pretrained("bert-base-uncased", config=config)
+        n_tokens = self.model.embeddings.word_embeddings.num_embeddings
+        word_embs = self.model.embeddings.word_embeddings(torch.arange(n_tokens)).detach().to(device)
+        hidden_dim = self.model.embeddings.word_embeddings.embedding_dim
         hopfield_input = np.prod(input_dim[1:])
         self.frozen_hopfield = FrozenHopfield(hidden_dim, hopfield_input, word_embs, beta=beta)
 
@@ -146,10 +145,16 @@ class HELM(nn.Module):
         bs, *_ = observations.shape
         obs_query = self.query_encoder(observations)
         vocab_encoding = self.frozen_hopfield.forward(observations)
-        out = self.model(inputs_embeds=vocab_encoding.unsqueeze(1), output_hidden_states=True, mems=self.memory)
-        self.memory = out.mems
-        hidden = out.last_hidden_state[:, -1, :]
-        hiddens = out.last_hidden_state[:, -1, :].cpu().numpy()
+        self.memory.push(vocab_encoding)
+        out = self.model(
+            inputs_embeds=self.memory.data,
+            attention_mask=(self.memory.data != 0).float().mean(dim=2).to(self.device),
+            position_ids=torch.arange(self.memory.shape[1], dtype=torch.long, device=self.device).repeat(bs, 1),
+            token_type_ids=torch.zeros((self.memory.shape[:2]), dtype=torch.long, device=self.device),
+            output_hidden_states=True
+        )
+        hidden = out.pooler_output
+        hiddens = out.pooler_output.cpu().numpy()
 
         hidden = torch.cat([hidden, obs_query], dim=-1)
 
