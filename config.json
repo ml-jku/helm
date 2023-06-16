@@ -30,5 +30,6 @@
     "start_fraction": 0,
     "epsilon": 1e-8,
     "vf_coef": 0.5,
-    "seed": null
+    "seed": null,
+    "topk": 1
 }

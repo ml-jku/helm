@@ -1,9 +1,11 @@
 import torch.nn as nn
 from torch.distributions import Categorical
-from transformers import TransfoXLModel, TransfoXLConfig
+from transformers import TransfoXLModel, TransfoXLConfig, TransfoXLTokenizer
 import torch
 import numpy as np
 import clip
+import os
+from clip.simple_tokenizer import SimpleTokenizer
 
 
 class DiscreteActor(nn.Module):
@@ -44,12 +46,12 @@ class SmallImpalaCNN(nn.Module):
     def __init__(self, observation_shape, channel_scale=1, hidden_dim=256):
         super(SmallImpalaCNN, self).__init__()
         self.obs_size = observation_shape
-        in_channels = 3
+        self.in_channels = 3
         kernel1 = 8 if self.obs_size[1] > 9 else 4
         kernel2 = 4 if self.obs_size[2] > 9 else 2
         stride1 = 4 if self.obs_size[1] > 9 else 2
         stride2 = 2 if self.obs_size[2] > 9 else 1
-        self.block1 = nn.Sequential(nn.Conv2d(in_channels=in_channels, out_channels=16*channel_scale, kernel_size=kernel1, stride=stride1),
+        self.block1 = nn.Sequential(nn.Conv2d(in_channels=self.in_channels, out_channels=16*channel_scale, kernel_size=kernel1, stride=stride1),
                                     nn.ReLU())
         self.block2 = nn.Sequential(nn.Conv2d(in_channels=16*channel_scale, out_channels=32*channel_scale, kernel_size=kernel2, stride=stride2),
                                     nn.ReLU())
@@ -61,6 +63,8 @@ class SmallImpalaCNN(nn.Module):
         self.apply(xavier_uniform_init)
 
     def forward(self, x):
+        if x.shape[1] != self.in_channels:
+            x = x.permute(0, 3, 1, 2)
         x = self.block1(x)
         x = self.block2(x)
         x = x.reshape(x.size(0), -1)
@@ -180,7 +184,7 @@ class HELMv2(nn.Module):
         word_embs = self.model.word_emb(torch.arange(n_tokens)).detach().to(device)
         self.we_std = word_embs.std(0)
         self.we_mean = word_embs.mean(0)
-        self.vis_encoder = VisionBackbone()
+        self.vis_encoder = VisionBackbone("RN50")
         hidden_dim = self.model.d_embed
 
         for p in self.model.parameters():
@@ -238,19 +242,130 @@ class HELMv2(nn.Module):
         return value, log_prob, entropy
 
 
+class SHELM(nn.Module):
+    def __init__(self, action_space, input_dim, optimizer, learning_rate, env_id, topk=1, epsilon=1e-8, mem_len=511,
+                 clip_encoder='ViT-B/16', device='cuda'):
+        super(SHELM, self).__init__()
+        config = TransfoXLConfig()
+        config.mem_len = mem_len
+        self.mem_len = config.mem_len
+
+        self.model = TransfoXLModel.from_pretrained('transfo-xl-wt103', config=config)
+        self.clip_tokenizer = SimpleTokenizer()
+        self.tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
+        if 'psychlab' in env_id:
+            self.clip_embs = np.load(os.path.join('data', f'{clip_encoder.replace("/", "")}_dmlab_prompt_embs.npz'))
+        else:
+            self.clip_embs = np.load(os.path.join('data', f'{clip_encoder.replace("/", "")}_embs.npz'))
+        self.lexical_overlap = np.load(os.path.join('data', 'clip_transfo-xl-wt103_intersect.npz'))
+        self.clip_embs = torch.FloatTensor(self.clip_embs[self.lexical_overlap]).cuda()
+        n_tokens = self.model.word_emb.n_token
+        self.word_embs = self.model.word_emb(torch.arange(n_tokens)).detach().to(device)
+        self.topk = topk
+
+        self.vis_encoder = VisionBackbone(clip_encoder)
+        hidden_dim = self.model.d_embed
+
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.query_encoder = SmallImpalaCNN(input_dim, channel_scale=4, hidden_dim=hidden_dim)
+        self.out_dim = hidden_dim*2
+        self.actor = DiscreteActor(self.out_dim, 128, action_space.n).apply(orthogonal_init)
+        self.critic = nn.Sequential(nn.Linear(self.out_dim, 512),
+                                    nn.LayerNorm(512, elementwise_affine=False),
+                                    nn.ReLU(),
+                                    nn.Linear(512, 1)).apply(orthogonal_init)
+        try:
+            self.optimizer = getattr(torch.optim, optimizer)(self.yield_trainable_params(), lr=learning_rate,
+                                                             eps=epsilon)
+        except AttributeError:
+            raise NotImplementedError(f"{optimizer} does not exist")
+        self.memory = None
+
+    def yield_trainable_params(self):
+        for n, p in self.named_parameters():
+            if 'model.' in n or 'vis_encoder' in n:
+                continue
+            else:
+                yield p
+
+    def _calc_cos_sim(self, src, target):
+        normed_src = src / src.norm(dim=-1, keepdim=True)
+        normed_tar = target / target.norm(dim=-1, keepdim=True)
+        return normed_src @ normed_tar.T
+
+    def _get_top_k_toks(self, src, tar, k=1):
+        cos_sims = self._calc_cos_sim(src, tar)
+        ranked = np.argsort(cos_sims.detach().cpu().numpy(), axis=-1)[:, ::-1][:, :k]
+        ranked = self.lexical_overlap[ranked]
+        decoded = []
+        embs = []
+        for toks in ranked:
+            dec = [self.clip_tokenizer.decode([t]) for t in toks]
+            decoded.append(dec)
+            enc = self.tokenizer.encode(dec)
+            embs.append(self.word_embs[enc])
+        embs = torch.stack(embs)
+        return embs, decoded
+
+    def forward(self, observations):
+        if observations.shape[1] != 3:
+            bs, h, w, c = observations.shape
+            observations = observations.reshape(bs, c, h, w)
+        else:
+            bs, *_ = observations.shape
+        obs_query = self.query_encoder(observations)
+        observations = self.vis_encoder(observations)
+        observations, _ = self._get_top_k_toks(observations, self.clip_embs, self.topk)
+        if len(observations.shape) == 2:
+            observations = observations.unsqueeze(1)
+        out = self.model(inputs_embeds=observations, output_hidden_states=True, mems=self.memory)
+        self.memory = out.mems
+        hidden = out.last_hidden_state[:, -1, :]
+        hiddens = out.last_hidden_state[:, -1, :].cpu().numpy()
+
+        hidden = torch.cat([hidden, obs_query], dim=-1)
+
+        action, log_prob = self.actor(hidden)
+        values = self.critic(hidden).squeeze()
+
+        return action.cpu().numpy(), values.cpu().numpy(), log_prob.cpu().numpy().squeeze(), hiddens
+
+    def evaluate_actions(self, hidden_states, actions, observations):
+        if observations.shape[1] != 3:
+            bs, h, w, c = observations.shape
+            observations = observations.reshape(bs, c, h, w)
+        else:
+            bs, *_ = observations.shape
+        queries = self.query_encoder(observations)
+        hidden = torch.cat([hidden_states, queries], dim=-1)
+
+        log_prob, entropy = self.actor.evaluate(hidden, actions)
+        value = self.critic(hidden).squeeze()
+
+        return value, log_prob, entropy
+
+
 class VisionBackbone(nn.Module):
-    def __init__(self):
+    def __init__(self, encoder):
         super(VisionBackbone, self).__init__()
         print(f"Allocating CLIP...")
-        self.model, preprocess = clip.load("RN50")
+        self.model, preprocess = clip.load(encoder)
         self.transforms = preprocess
         preprocess.transforms = [preprocess.transforms[0], preprocess.transforms[1], preprocess.transforms[-1]]
         self.transforms = preprocess
+        self.n_channels = 3
 
         self.model.eval()
         self._deactivate_grad()
 
     def forward(self, observations):
+        if observations.shape[1] != self.n_channels:
+            observations = observations.permute(0, 3, 1, 2)
         observations = self._preprocess(observations)
         out = self.model.encode_image(observations).float()
         return out

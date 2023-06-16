@@ -1,5 +1,13 @@
 # History Compression via Language Models in Reinforcement Learning
 
+
+This repository contains the code for the papers:
+- **[History Compression via Language Models in Reinforcement Learning (HELM)](https://arxiv.org/abs/2205.12258)**
+- **[Toward Semantic History Compression for Reinforcement Learning (HELMv2)](https://openreview.net/forum?id=97C6klf5shp)**
+- **[Semantic HELM: An Interpretable Memory for Reinforcement Learning (SHELM)](https://arxiv.org/abs/2306.09312)**
+
+## HELM
+
 Fabian Paischer<sup>1 2</sup>,
 Thomas Adler<sup>1</sup>,
 Vihang Patil<sup>1</sup>,
@@ -13,21 +21,23 @@ Sepp Hochreiter<sup>1 2 3</sup>
 <sup>2</sup> ELLIS Unit Linz  
 <sup>3</sup> Institute of Advanced Research in Artificial Intelligence (IARAI)
 
----
 
-**This is the repository for the papers:<br>
-[History Compression via Language Models in Reinforcement Learning](https://arxiv.org/abs/2205.12258)** and <br>
-**[Toward Semantic History Compression for Reinforcement Learning](https://openreview.net/forum?id=97C6klf5shp).**
+<p align="center">
+  <img src="figures/helm.png" width="500">
+</p>
 
-**You can find a detailed blog post on HELM at [this link](https://ml-jku.github.io/blog/2022/helm/).**
+ 
+HELM leverages pretrained language encoders as a memory component for partially observable environments.
+Thereby, it uses a modern Hopfield Network to map observations to language tokens.
 
-## HELM
+**A detailed blog post on HELM is available at [this link](https://ml-jku.github.io/blog/2022/helm/).**
 
-To reproduce our results, first clone the repository and install the conda environment by
+
+To reproduce the HELM baseline, first clone the repository and install the conda environment by
 
     git clone https://github.com/ml-jku/helm.git
     cd helm
-    conda env create -f environment.yml
+    conda env create -f env.yml
 
 After installing the conda environment you can train HELM on the KeyCorridor environment by
 
@@ -53,22 +63,112 @@ By default a Tensorboard log is created.
 
 ## HELMv2
 
-We have added support for HELMv2 [here](trainers/helmv2_trainer.py).
-We have updated the dependencies for HELMv2 in the [environment file](environment.yml).
-To run HELMv2, simply update your existing environment, or create a new one. 
-        
-Afterwards simply call 
+Fabian Paischer<sup>1 2</sup>,
+Thomas Adler<sup>1</sup>,
+Markus Hofmarcher<sup>1 2</sup>,
+Andreas Radler <sup>1</sup>,
+Sepp Hochreiter<sup>1 2 3</sup>
+
+<sup>1</sup> LIT AI Lab, Institute for Machine Learning, Johannes Kepler University Linz, Austria</br>
+<sup>2</sup> ELLIS Unit Linz  
+<sup>3</sup> Institute of Advanced Research in Artificial Intelligence (IARAI)
+
+<p align="center">
+  <img src="figures/helmv2.png" width="500">
+</p>
+
+
+HELMv2 replaces the random projection of HELM with a pretrained CLIP encoder.
+Further it employs ad adopted and fixed batchnorm layer to project the visual observations to the language space.
+The mapping to the language space for HELM and HELMv2 are arbitrary, i.e., no semantics are transferred to the language space.
+
+You can find the trainer file for HELMv2 [here](trainers/helmv2_trainer.py).
+
+To reproduce our results on the MiniGrid environments, simply run
+
+    python main.py --var model=HELMv2 --var env=MiniGrid-RedBlueDoors-6x6-v0
+
+To run HELMv2 on the MiniWorld benchmark suite you will first need to install ```gym-miniworld``` from source:
+
+    git clone https://github.com/maximecb/gym-miniworld.git
+    cd gym-miniworld
+    git checkout ff61a67
+    pip3 install -e .
+
+**Note** that it is vital to check out and install the specified commit from source, since the MiniWorld benchmark suite has undergone significant changes ever since.
+Then, to run HELMv2 on MiniWorld simply specify the MiniWorld environment as follows:
 
     python main.py --var model=HELMv2 --var env=MiniWorld-Sign-v0
     
-to run experiments on the 3D MiniWorld environments.
-You can find a comprehensive list of MiniWorld environments [here](https://github.com/Farama-Foundation/Miniworld/blob/master/docs/environments.md).
+You can find a comprehensive list of MiniWorld environments [here](https://github.com/Farama-Foundation/Miniworld/blob/ff61a67678eec7d6ca639abbfe4afeaaab8a11a4/docs/environments.md).
 If you encounter problems for training on MiniWorld (NoSuchDisplayException)
 
     xvfb-run -a -s "-screen 0 1024x768x24 -ac +extension GLX +render -noreset" python main.py --var model=HELMv2 --var env=MiniWorld-Sign-v0
 
-More details regarding troubleshooting can be found [here](https://github.com/Farama-Foundation/Miniworld/blob/master/docs/troubleshooting.md).
-Code for training the semantic mappings from observation to language space, as well as pretrained mappings will be added soon!
+More details regarding troubleshooting can be found [here](https://github.com/Farama-Foundation/Miniworld/blob/ff61a67678eec7d6ca639abbfe4afeaaab8a11a4/docs/troubleshooting.md).
+
+If you are interested in the semantic mappings from image to text space introduced in [Toward Semantic History Compression for Reinforcement Learning (HELMv2)](https://openreview.net/forum?id=97C6klf5shp), please also check out [this repo]() which uses these mappings for image-conditioned text generation.
+
+## Semantic HELM
+
+Fabian Paischer<sup>1 2</sup>,
+Thomas Adler<sup>1</sup>,
+Markus Hofmarcher<sup>1 2</sup>,
+Sepp Hochreiter<sup>1 2 3</sup>
+
+<sup>1</sup> LIT AI Lab, Institute for Machine Learning, Johannes Kepler University Linz, Austria </br>
+<sup>2</sup> ELLIS Unit Linz  
+<sup>3</sup> Institute of Advanced Research in Artificial Intelligence (IARAI)
+
+![shelm](figures/shelm.png)
+
+
+Semantic HELM utilizes a retrieval mechanism via a pretrained CLIP model to encode an image in the language space.
+Particularly, we use the vocabulary of the CLIP language encoder as our semantic database and augment each token with a set of prompts.
+Then, we retrieve corresponding tokens given a visual observation as input.
+Finally, the text-tokens are fed into the language encoder and represent the memory of an agent.
+The memory module of SHELM is intrinsically interpretable, which allows identifying failure cases and facilitates troubleshooting.
+SHELM significantly outperforms HELM, HELMv2, and Dreamerv2 on environments that are unsolvable without a memory component.
+
+---
+
+To run experiments with SHELM, you will need to extract the CLIP embeddings for the different environments first, by running
+
+    python prepare_embeddings.py
+    
+This will store prompt-augmented CLIP embeddings for the different environments, as well as a mapping for tokens appearing in both, the vocabulary of CLIP, and the TrXL in the ```data/``` directory.
+After doing so, you can run SHELM by setting ```--var model=SHELM``` on any of the aforementioned environnments.
+
+In order to reproduce our runs on the Psychlab Continuous Recognition task you will need to download and install [deepmind_lab](https://github.com/deepmind/lab) first.
+Then, you will need to download the dataset contianing the stimuli used by the continuous recognition environment by executing
+
+    cd data/brady_konkle_oliva2008
+    ./download_data.sh
+    
+Finally, set the ```DATASET_PATH``` in ```ENV_DIR/lib/python3.8/site-packages/deepmind_lab/baselab/game_scripts/datasets/brady_konkle_oliva2008.lua``` to the directory containing the images.
+```ENV_DIR``` corresponds to the path of your conda environment.
+Now you can set ```--var env=psychlab_continuous_recognition``` to train on the continuous recognition task.
+
+If you encounter issues while trying to run the psychlab tasks (Failed to connect RL API), you will need to install sdl2 for headless rendering:
+
+    conda install -c conda-forge sdl2
+
+You can find all hyperparameters for our psychlab experiments in the paper.
+
+For running experiments on Avalon we used the official codebase of the Avalon environment, which you can find [here](https://github.com/Avalon-Benchmark/avalon).
+We will also add the code for these experiments soon.
+
+---
+
+## Stay tuned for the next updates
+
+- All results on Psychlab, Avalon, MiniGrid/MiniWorld
+- Visualization of tokens being fed into the memory
+- Support for Avalon environment
+- Support for BERT-style language encoders
+- Inference speedup for HELM-like models
+
+--- 
 
 ## LICENSE
 MIT LICENSE
@@ -93,13 +193,14 @@ If you find our papers and code useful, please consider citing HELM,
       abstract = 	 {In a partially observable Markov decision process (POMDP), an agent typically uses a representation of the past to approximate the underlying MDP. We propose to utilize a frozen Pretrained Language Transformer (PLT) for history representation and compression to improve sample efficiency. To avoid training of the Transformer, we introduce FrozenHopfield, which automatically associates observations with pretrained token embeddings. To form these associations, a modern Hopfield network stores these token embeddings, which are retrieved by queries that are obtained by a random but fixed projection of observations. Our new method, HELM, enables actor-critic network architectures that contain a pretrained language Transformer for history representation as a memory module. Since a representation of the past need not be learned, HELM is much more sample efficient than competitors. On Minigrid and Procgen environments HELM achieves new state-of-the-art results. Our code is available at https://github.com/ml-jku/helm.}
     }
     
-and HELMv2:
-    
-    @inproceedings{paischer2022toward,
-        title={Toward Semantic History Compression for Reinforcement Learning},
-        author={Fabian Paischer and Thomas Adler and Andreas Radler and Markus Hofmarcher and Sepp Hochreiter},
-        booktitle={Second Workshop on Language and Reinforcement Learning},
-        year={2022},
-        url={https://openreview.net/forum?id=97C6klf5shp}
+and SHELM
+
+    @misc{paischer2023semantic,
+      title={Semantic HELM: An Interpretable Memory for Reinforcement Learning}, 
+      author={Fabian Paischer and Thomas Adler and Markus Hofmarcher and Sepp Hochreiter},
+      year={2023},
+      eprint={2306.09312},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
     }
 

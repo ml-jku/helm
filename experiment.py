@@ -1,4 +1,4 @@
-from utils import *
+from utils import make_maze_env, make_dmlab_env, make_miniworld_env, make_minigrid_env, make_procgen_env
 import torch
 import os
 import uuid
@@ -32,11 +32,14 @@ class Experiment:
         elif 'MiniWorld' in self.config['env']:
             env = DummyVecEnv([make_miniworld_env(self.config['env']) for _ in range(self.config['n_envs'])])
             env = VecNormalize(VecMonitor(env), norm_reward=True, norm_obs=False, clip_reward=1.)
+        elif 'psychlab' in self.config['env']:
+            env = DummyVecEnv([make_dmlab_env(self.config['env']) for _ in range(self.config['n_envs'])])
+            env = VecNormalize(VecMonitor(env), norm_reward=True, norm_obs=False, clip_reward=1.)
         else:
             # create procgen environment
             env = make_procgen_env(id=self.config['env'], num_envs=self.config['n_envs'], num_levels=0)
 
-        assert self.config['model'] in ['HELMv2', 'HELM', 'Impala-PPO', 'CNN-PPO'], \
+        assert self.config['model'] in ['SHELM', 'HELMv2', 'HELM', 'Impala-PPO', 'CNN-PPO'], \
             f"Model type {self.config['model']} not recognized!"
 
         if self.config['model'] == 'HELM':
@@ -48,6 +51,9 @@ class Experiment:
         elif self.config['model'] == 'Impala-PPO':
             from trainers.lstm_trainer import LSTMPPO
             trainer = LSTMPPO
+        elif self.config['model'] == 'SHELM':
+            from trainers.shelm_trainer import SHELMPPO
+            trainer = SHELMPPO
         else:
             from trainers.cnn_trainer import CNNPPO
             trainer = CNNPPO

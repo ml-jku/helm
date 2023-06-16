@@ -11,7 +11,8 @@ import torch as th
 from typing import NamedTuple
 from procgen import ProcgenEnv
 from envs.random_maze import Env
-from gymnasium.spaces.dict import Dict
+from variables import _ACTION_MAP, ACTIONS
+import dm_env
 
 
 def generate_in_bg(generator, num_cached=10):
@@ -77,43 +78,121 @@ class Minigrid2Image(gym.ObservationWrapper):
         return observation['image']
 
 
-class MiniWorldWrapper(gym.Wrapper):
+class SignObservationWrapper(gym.ObservationWrapper):
     def __init__(self, env):
-        super().__init__(env)
-        self.action_space = gym.spaces.Discrete(env.action_space.n)
-        if isinstance(self.observation_space, Dict):
-            shape = env.observation_space.spaces['obs'].shape
-            self.observation_space = gym.spaces.Box(low=0, high=255, shape=(shape[-1], *shape[:-1]))
-        else:
-            shape = self.env.observation_space.shape
-            self.observation_space = gym.spaces.Box(shape=(shape[-1], *shape[:-1]), low=0, high=255)
+        gym.ObservationWrapper.__init__(self, env)
+        self.high = int(self.env.observation_space.high[0, 0, 0])
 
-    def reset(self):
-        obs = self.env.reset()[0]
-        if isinstance(obs, dict):
-            obs = obs['obs']
-        return obs.transpose(2, 0, 1)
-
-    def step(self, action):
-        obs, rew, done, _, info = self.env.step(action)
-        if isinstance(obs, dict):
-            obs = obs['obs']
-        return obs.transpose(2, 0, 1), rew, done, info
-
-    def seed(self, seed=None):
-        pass
+    def observation(self, observation):
+        return observation['obs']
 
 
 def make_miniworld_env(id: str):
-    import gym_miniworld
-    import gymnasium
 
     def _init():
-        env = gymnasium.make(id)
-        env = MiniWorldWrapper(env)
+        import gym_miniworld
+        env = gym.make(id)
+        if "Sign" in id:
+            env = SignObservationWrapper(env)
         return env
 
     return _init
+
+
+def make_dmlab_env(id: str):
+
+    def _init():
+        import deepmind_lab
+        env = DeepMindLabEnvironment(level_name=id)
+        return env
+
+    return _init
+
+
+class DeepMindLabEnvironment(dm_env.Environment):
+    """DeepMind Lab environment."""
+
+    def __init__(self, level_name: str, action_repeats: int = 4, record_episodes: bool = False):
+        """Construct environment.
+        e
+        Args:
+          level_name: DeepMind lab level name (e.g. 'rooms_watermaze').
+          action_repeats: Number of times the same action is repeated on every
+            step().
+        """
+        import deepmind_lab
+        config = dict(fps='30',
+                      height='80',
+                      width='80',
+                      maxAltCameraHeight='1',
+                      maxAltCameraWidth='1',
+                      hasAltCameras='false')
+
+        # seekavoid_arena_01 is not part of dmlab30.
+        level_name = 'contributed/dmlab30/{}'.format(level_name)
+
+        self._lab = deepmind_lab.Lab(level_name, ['RGB_INTERLEAVED'], config)
+        self._action_repeats = action_repeats
+        self._reward = 0
+        self._last_done = False
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(80, 80, 3))
+        self.action_space = gym.spaces.Discrete(n=len(ACTIONS))
+        self.metadata = None
+        self.record_episodes = record_episodes
+        if record_episodes:
+            self.trajectory = []
+
+    def _observation(self):
+        last_action = getattr(self, '_action', 0)
+        last_reward = getattr(self, '_reward', 0)
+        self._last_observation = (
+            self._lab.observations()['RGB_INTERLEAVED'],
+            np.array(last_action, dtype=np.int64),
+            np.array(last_reward, dtype=np.float32)
+        )
+        return self._last_observation
+
+    def reset(self):
+        self._lab.reset()
+        self.trajectory = []
+        stepdata = dm_env.restart(self._observation())
+        return stepdata.observation[0]
+
+    def step(self, action):
+        if not self._lab.is_running():
+            # Dump collected episode
+            stepdata = dm_env.restart(self.reset())
+            self.trajectory.append(stepdata)
+            return stepdata.observation, self._reward, True, {}
+
+        self._action = action.item()
+        if self._action not in _ACTION_MAP:
+            raise ValueError('Action not available')
+        lab_action = np.array(_ACTION_MAP[self._action], dtype=np.intc)
+        self._reward = self._lab.step(lab_action, num_steps=self._action_repeats)
+
+        if self._lab.is_running():
+            stepdata = dm_env.transition(self._reward, self._observation())
+            self.trajectory.append(stepdata)
+            return stepdata.observation[0], self._reward, False, {}
+
+        stepdata = dm_env.termination(self._reward, self._last_observation)
+        self.trajectory.append(stepdata)
+        return stepdata.observation[0], self._reward, True, {}
+
+    def observation_spec(self):
+        return (
+                    dm_env.specs.Array(shape=(80, 80, 3), dtype=np.uint8),
+                    dm_env.specs.Array(shape=(), dtype=np.int64),
+                    dm_env.specs.Array(shape=(), dtype=np.float32)
+        )
+
+    def action_spec(self):
+        return dm_env.specs.DiscreteArray(num_values=15, dtype=np.int64)
+
+    def seed(self, seed):
+        pass
+
 
 
 def make_minigrid_env(id: str):
