@@ -195,12 +195,21 @@ If you find our papers and code useful, please consider citing HELM,
     
 and SHELM
 
-    @misc{paischer2023semantic,
-      title={Semantic HELM: An Interpretable Memory for Reinforcement Learning}, 
-      author={Fabian Paischer and Thomas Adler and Markus Hofmarcher and Sepp Hochreiter},
-      year={2023},
-      eprint={2306.09312},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
-    }
+    @article{paischer2023semantic,
+        author       = {Fabian Paischer and
+                      Thomas Adler and
+                      Markus Hofmarcher and
+                      Sepp Hochreiter},
+        title        = {Semantic {HELM:} An Interpretable Memory for Reinforcement Learning},
+        journal      = {CoRR},
+        volume       = {abs/2306.09312},
+        year         = {2023},
+        url          = {https://doi.org/10.48550/arXiv.2306.09312},
+        doi          = {10.48550/arXiv.2306.09312},
+        eprinttype    = {arXiv},
+        eprint       = {2306.09312},
+        timestamp    = {Mon, 19 Jun 2023 11:06:52 +0200},
+        biburl       = {https://dblp.org/rec/journals/corr/abs-2306-09312.bib},
+        bibsource    = {dblp computer science bibliography, https://dblp.org}
+        }
 
