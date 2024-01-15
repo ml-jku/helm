@@ -160,6 +160,23 @@ We will also add the code for these experiments soon.
 
 ---
 
+## Reproduction of Paper results
+
+We added all configs for MiniGrid/MiniWorld/Psychlab experiments in the ```configs``` directory.
+To reproduce a result in the paper, simply load the corresponding config via the ```--config``` command line argument of the ```main.py``` script.
+
+---
+
+## Running a trained policy
+
+To run a trained policy make sure to first set the ```--var save_ckpt=1``` argument during training.
+This stores the best checkpoint in the ```experiments``` directory.
+To sample episodes from a trained policy you can then simply execute
+
+    python eval-py --ckpt-path PATH_TO_CKPT_DIR
+
+---
+
 ## Stay tuned for the next updates
 
 - All results on Psychlab, Avalon, MiniGrid/MiniWorld

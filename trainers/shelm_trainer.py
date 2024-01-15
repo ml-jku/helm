@@ -220,7 +220,8 @@ class SHELMPPO(OnPolicyAlgorithm):
 
         self.policy = SHELM(env.action_space, self.observation_space.shape, self.config['optimizer'],
                             self.config['learning_rate'], self.config['env'], self.config['topk'],
-                            device=self.device).to(self.device)
+                            device=self.device, mem_len=self.config['mem_len'],
+                            clip_encoder=self.config['clip_encoder']).to(self.device)
 
     def _set_seed(self, seed: int) -> None:
         """
@@ -265,7 +266,7 @@ class SHELMPPO(OnPolicyAlgorithm):
         self.logger.record("train/ent_coef", self.ent_coef)
 
     def _dump_sources(self, outpath) -> None:
-        zipf = zipfile.ZipFile(os.path.join(outpath, 'LMRL.zip'), 'w', zipfile.ZIP_DEFLATED)
+        zipf = zipfile.ZipFile(os.path.join(outpath, 'helm.zip'), 'w', zipfile.ZIP_DEFLATED)
         src_files = glob.glob(f'{os.path.abspath(".")}/**/*.py', recursive=True)
         for file in src_files:
             zipf.write(file, os.path.relpath(file, '../'))

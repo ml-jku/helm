@@ -112,7 +112,7 @@ def make_dmlab_env(id: str):
 class DeepMindLabEnvironment(dm_env.Environment):
     """DeepMind Lab environment."""
 
-    def __init__(self, level_name: str, action_repeats: int = 4, record_episodes: bool = False):
+    def __init__(self, level_name: str, action_repeats: int = 4):
         """Construct environment.
         e
         Args:
@@ -138,9 +138,6 @@ class DeepMindLabEnvironment(dm_env.Environment):
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=(80, 80, 3))
         self.action_space = gym.spaces.Discrete(n=len(ACTIONS))
         self.metadata = None
-        self.record_episodes = record_episodes
-        if record_episodes:
-            self.trajectory = []
 
     def _observation(self):
         last_action = getattr(self, '_action', 0)

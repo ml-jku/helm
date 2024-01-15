@@ -75,7 +75,6 @@ class SmallImpalaCNN(nn.Module):
     def _get_feature_size(self, shape):
         if shape[0] != 3:
             dummy_input = torch.zeros((shape[-1], *shape[:-1])).unsqueeze(0)
-            print(dummy_input.shape)
         else:
             dummy_input = torch.zeros((shape[0], *shape[1:])).unsqueeze(0)
         x = self.block2(self.block1(dummy_input))
@@ -146,7 +145,7 @@ class HELM(nn.Module):
             else:
                 yield p
 
-    def forward(self, observations):
+    def forward(self, observations, deterministic=False):
         bs, *_ = observations.shape
         obs_query = self.query_encoder(observations)
         vocab_encoding = self.frozen_hopfield.forward(observations)
@@ -157,7 +156,7 @@ class HELM(nn.Module):
 
         hidden = torch.cat([hidden, obs_query], dim=-1)
 
-        action, log_prob = self.actor(hidden)
+        action, log_prob = self.actor(hidden, deterministic=deterministic)
         values = self.critic(hidden).squeeze()
 
         return action.cpu().numpy(), values.cpu().numpy(), log_prob.cpu().numpy().squeeze(), hiddens
@@ -214,7 +213,7 @@ class HELMv2(nn.Module):
             else:
                 yield p
 
-    def forward(self, observations):
+    def forward(self, observations, deterministic=False):
         bs, *_ = observations.shape
         obs_query = self.query_encoder(observations)
         observations = self.vis_encoder(observations)
@@ -227,7 +226,7 @@ class HELMv2(nn.Module):
 
         hidden = torch.cat([hidden, obs_query], dim=-1)
 
-        action, log_prob = self.actor(hidden)
+        action, log_prob = self.actor(hidden, deterministic=deterministic)
         values = self.critic(hidden).squeeze()
 
         return action.cpu().numpy(), values.cpu().numpy(), log_prob.cpu().numpy().squeeze(), hiddens
@@ -298,7 +297,7 @@ class SHELM(nn.Module):
         normed_tar = target / target.norm(dim=-1, keepdim=True)
         return normed_src @ normed_tar.T
 
-    def _get_top_k_toks(self, src, tar, k=1):
+    def get_top_k_toks(self, src, tar, k=1):
         cos_sims = self._calc_cos_sim(src, tar)
         ranked = np.argsort(cos_sims.detach().cpu().numpy(), axis=-1)[:, ::-1][:, :k]
         ranked = self.lexical_overlap[ranked]
@@ -312,15 +311,14 @@ class SHELM(nn.Module):
         embs = torch.stack(embs)
         return embs, decoded
 
-    def forward(self, observations):
+    def forward(self, observations, deterministic=False):
         if observations.shape[1] != 3:
-            bs, h, w, c = observations.shape
-            observations = observations.reshape(bs, c, h, w)
+            observations = observations.permute(0, 3, 1, 2)
         else:
             bs, *_ = observations.shape
         obs_query = self.query_encoder(observations)
         observations = self.vis_encoder(observations)
-        observations, _ = self._get_top_k_toks(observations, self.clip_embs, self.topk)
+        observations, _ = self.get_top_k_toks(observations, self.clip_embs, self.topk)
         if len(observations.shape) == 2:
             observations = observations.unsqueeze(1)
         out = self.model(inputs_embeds=observations, output_hidden_states=True, mems=self.memory)
@@ -330,15 +328,14 @@ class SHELM(nn.Module):
 
         hidden = torch.cat([hidden, obs_query], dim=-1)
 
-        action, log_prob = self.actor(hidden)
+        action, log_prob = self.actor(hidden, deterministic=deterministic)
         values = self.critic(hidden).squeeze()
 
         return action.cpu().numpy(), values.cpu().numpy(), log_prob.cpu().numpy().squeeze(), hiddens
 
     def evaluate_actions(self, hidden_states, actions, observations):
         if observations.shape[1] != 3:
-            bs, h, w, c = observations.shape
-            observations = observations.reshape(bs, c, h, w)
+            observations = observations.permute(0, 3, 1, 2)
         else:
             bs, *_ = observations.shape
         queries = self.query_encoder(observations)
