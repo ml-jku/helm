@@ -219,9 +219,9 @@ class SHELMPPO(OnPolicyAlgorithm):
 
 
         self.policy = SHELM(env.action_space, self.observation_space.shape, self.config['optimizer'],
-                            self.config['learning_rate'], self.config['env'], self.config['topk'],
+                            self.config['learning_rate'], self.config['env'], self.config.get('topk', 1),
                             device=self.device, mem_len=self.config['mem_len'],
-                            clip_encoder=self.config['clip_encoder']).to(self.device)
+                            clip_encoder=self.config.get('clip_encoder', 'ViT-B/16')).to(self.device)
 
     def _set_seed(self, seed: int) -> None:
         """

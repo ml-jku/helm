@@ -18,7 +18,7 @@
     "mem_len": 511,
     "min_ent_coef": 0.0001,
     "min_lr": 1e-07,
-    "model": "IMPALA",
+    "model": "Impala-PPO",
     "n_batches": 8,
     "n_envs": 16,
     "n_epochs": 3,
